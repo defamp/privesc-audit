@@ -62,6 +62,7 @@ def analyze_capabilities(getcap_output: str) -> List[Finding]:
                 ),
                 remediation=f"Remove the capability if not required: 'setcap -r {path}'. Grant the narrowest capability possible, and avoid putting powerful caps on interpreters or shells.",
                 evidence=line,
+                fix_command=f"setcap -r {path}",
                 mitre=["T1548"],
                 references=[REF],
             )

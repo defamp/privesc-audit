@@ -6,4 +6,4 @@ privilege escalation, and reports each one with remediation guidance. It never
 modifies the system and never executes exploit code.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

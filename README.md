@@ -32,6 +32,7 @@ privesc-audit                         # console report of the local host
 privesc-audit --format json -o out.json
 privesc-audit --format markdown
 privesc-audit --checks suid,sudo      # run only selected checks
+privesc-audit --format fix-script -o harden.sh   # reviewable hardening script
 ```
 
 Exit codes (handy for CI / cron): `0` = nothing found, `1` = low/medium only,
@@ -44,7 +45,8 @@ Exit codes (handy for CI / cron): `0` = nothing found, `1` = low/medium only,
 | `suid` | SUID/SGID binaries, flagging those known to escalate when privileged | remove the SUID bit / restrict the binary |
 | `sudo` | over-broad or password-less `sudo -l` rules, shell-breakout binaries | scope the sudoers entry, drop `ALL`/`NOPASSWD` |
 | `capabilities` | dangerous file capabilities (e.g. `cap_setuid`, `cap_dac_override`) | remove the capability, grant the narrowest one |
-| `writable` | writable `/etc/passwd`, `/etc/shadow`, `/etc/sudoers`, writable `$PATH` dirs & cron | restore safe owner/permissions |
+| `writable` | writable `/etc/passwd`, `/etc/shadow`, `/etc/sudoers`, writable `$PATH` dirs, cron & systemd units | restore safe owner/permissions |
+| `nfs` | NFS exports with `no_root_squash` in `/etc/exports` | switch to `root_squash`, restrict hosts |
 
 The "known to escalate" list is derived from the public
 [GTFOBins](https://gtfobins.github.io/) project — used here purely as *audit

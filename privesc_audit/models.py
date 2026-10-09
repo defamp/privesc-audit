@@ -29,6 +29,7 @@ class Finding:
     detail: str                     # what was observed and why it matters
     remediation: str                # how a defender should fix / harden it
     evidence: Optional[str] = None  # the concrete path/line observed (read-only)
+    fix_command: Optional[str] = None  # a concrete hardening command, if one applies
     mitre: List[str] = field(default_factory=list)   # ATT&CK technique IDs
     references: List[str] = field(default_factory=list)
 

@@ -69,3 +69,29 @@ def test_writable_sensitive_files():
 def test_writable_path_and_cron():
     assert analyze_writable_path_dirs(["/tmp"])[0].mitre == ["T1574.007"]
     assert analyze_writable_cron(["/etc/crontab"])[0].severity == Severity.HIGH
+
+
+from privesc_audit.checks.nfs import analyze_nfs
+from privesc_audit.checks.writable import analyze_writable_systemd
+
+
+def test_nfs_no_root_squash():
+    exports = "# comment\n/srv/share 192.168.0.0/24(rw,sync,no_root_squash)\n/pub *(ro,root_squash)\n"
+    findings = analyze_nfs(exports)
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.HIGH
+    assert "/srv/share" in findings[0].title
+    assert "root_squash" in findings[0].remediation
+
+
+def test_writable_systemd_unit():
+    f = analyze_writable_systemd(["/etc/systemd/system/evil.service"])[0]
+    assert f.severity == Severity.HIGH
+    assert f.fix_command and "chown root:root" in f.fix_command
+    assert f.mitre == ["T1543.002"]
+
+
+def test_suid_info_has_no_autofix():
+    # a legitimate-looking SUID binary must NOT get an auto-fix command
+    info = [f for f in analyze_suid(["/usr/bin/passwd"]) if f.severity == Severity.INFO][0]
+    assert info.fix_command is None

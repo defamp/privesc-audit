@@ -56,3 +56,24 @@ def test_cli_main_json_exit_code(monkeypatch, capsys):
 def test_cli_main_clean_exit_zero(monkeypatch):
     monkeypatch.setattr(cli, "scan", lambda checks: [])
     assert cli.main(["--format", "json"]) == 0
+
+
+from privesc_audit.report import render_fix_script
+
+
+def test_fix_script_includes_commands_and_header():
+    items = [
+        Finding(check="suid", title="SUID find", severity=Severity.HIGH, detail="x",
+                remediation="r", fix_command="chmod -s /usr/bin/find"),
+        Finding(check="sudo", title="manual sudo item", severity=Severity.HIGH, detail="x",
+                remediation="r"),  # no fix_command -> manual
+    ]
+    script = render_fix_script(items)
+    assert script.startswith("#!/usr/bin/env bash")
+    assert "REVIEW EVERY LINE" in script
+    assert "chmod -s /usr/bin/find" in script
+    assert "1 finding(s) need manual review" in script
+
+
+def test_fix_script_empty():
+    assert "No auto-fixable findings" in render_fix_script([])

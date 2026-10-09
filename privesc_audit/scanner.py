@@ -17,6 +17,7 @@ from .checks import suid as suid_check
 from .checks import sudo as sudo_check
 from .checks import capabilities as cap_check
 from .checks import writable as writable_check
+from .checks import nfs as nfs_check
 
 _TIMEOUT = 90
 
@@ -81,9 +82,33 @@ def collect_writable_cron() -> List[str]:
     return [p for p in candidates if os.path.exists(p) and os.access(p, os.W_OK)]
 
 
+def collect_writable_systemd() -> List[str]:
+    dirs = ["/etc/systemd/system", "/lib/systemd/system", "/usr/lib/systemd/system", "/run/systemd/system"]
+    out = []
+    for d in dirs:
+        if not os.path.isdir(d):
+            continue
+        try:
+            for name in os.listdir(d):
+                full = os.path.join(d, name)
+                if os.path.isfile(full) and os.access(full, os.W_OK):
+                    out.append(full)
+        except OSError:
+            continue
+    return out
+
+
+def collect_nfs_exports() -> str:
+    try:
+        with open("/etc/exports", "r", encoding="utf-8", errors="replace") as fh:
+            return fh.read()
+    except OSError:
+        return ""
+
+
 def scan(checks=None) -> List[Finding]:
     """Run the selected checks against the live system and return all findings."""
-    checks = set(checks or {"suid", "sudo", "capabilities", "writable"})
+    checks = set(checks or {"suid", "sudo", "capabilities", "writable", "nfs"})
     findings: List[Finding] = []
 
     if "suid" in checks:
@@ -97,6 +122,9 @@ def scan(checks=None) -> List[Finding]:
         findings += writable_check.analyze_sensitive_writable(collect_writable_sensitive())
         findings += writable_check.analyze_writable_path_dirs(collect_writable_path_dirs())
         findings += writable_check.analyze_writable_cron(collect_writable_cron())
+        findings += writable_check.analyze_writable_systemd(collect_writable_systemd())
+    if "nfs" in checks:
+        findings += nfs_check.analyze_nfs(collect_nfs_exports())
 
     findings.sort(key=lambda f: (-int(f.severity), f.check, f.title))
     return findings

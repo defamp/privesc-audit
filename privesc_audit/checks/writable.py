@@ -24,6 +24,10 @@ SENSITIVE_FILES = {
 }
 
 
+# Recommended mode when restoring a sensitive file.
+_SAFE_MODE = {"/etc/shadow": "640", "/etc/sudoers": "440"}
+
+
 def analyze_sensitive_writable(writable_paths: List[str]) -> List[Finding]:
     findings: List[Finding] = []
     for path in writable_paths:
@@ -32,14 +36,17 @@ def analyze_sensitive_writable(writable_paths: List[str]) -> List[Finding]:
         if not meta:
             continue
         impact, sev, tech = meta
+        mode = _SAFE_MODE.get(path, "644")
+        fix = f"chown root:root {path} && chmod {mode} {path}"
         findings.append(
             Finding(
                 check="writable",
                 title=f"Sensitive file is writable: {path}",
                 severity=sev,
                 detail=f"'{path}' is writable by the current user, which would let an attacker {impact}.",
-                remediation=f"Restore safe ownership/permissions (typically root:root, not world-writable): e.g. 'chown root:root {path} && chmod 644 {path}' (0640/0600 for shadow).",
+                remediation=f"Restore safe ownership/permissions: {fix}",
                 evidence=path,
+                fix_command=fix,
                 mitre=[tech],
                 references=[f"https://attack.mitre.org/techniques/{tech.split('.')[0]}/"],
             )
@@ -79,6 +86,26 @@ def analyze_writable_cron(paths: List[str]) -> List[Finding]:
                 evidence=p,
                 mitre=["T1053.003"],
                 references=["https://attack.mitre.org/techniques/T1053/003/"],
+            )
+        )
+    return findings
+
+
+def analyze_writable_systemd(paths: List[str]) -> List[Finding]:
+    """systemd unit files writable by a non-root user run code as root."""
+    findings: List[Finding] = []
+    for p in sorted(set(x.strip() for x in paths if x.strip())):
+        findings.append(
+            Finding(
+                check="writable",
+                title=f"Writable systemd unit: {p}",
+                severity=Severity.HIGH,
+                detail=f"'{p}' is a systemd unit writable by the current user; system units run as root, so this allows code execution as root.",
+                remediation=f"Restore root ownership and safe permissions: chown root:root {p} && chmod 644 {p}",
+                evidence=p,
+                fix_command=f"chown root:root {p} && chmod 644 {p}",
+                mitre=["T1543.002"],
+                references=["https://attack.mitre.org/techniques/T1543/002/"],
             )
         )
     return findings

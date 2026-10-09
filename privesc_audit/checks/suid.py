@@ -43,6 +43,7 @@ def analyze_suid(paths: List[str], mode: str = "suid") -> List[Finding]:
                         f"binary and monitor its use."
                     ),
                     evidence=path,
+                    fix_command=f"chmod -s {path}",
                     mitre=["T1548.001"],
                     references=[REF, gtfobins_url(name)],
                 )
@@ -54,8 +55,9 @@ def analyze_suid(paths: List[str], mode: str = "suid") -> List[Finding]:
                     title=f"{bit} binary present: {name}",
                     severity=Severity.INFO,
                     detail=f"'{path}' carries the {bit} bit. Not a known high-risk binary, but worth inventorying.",
-                    remediation=f"Verify the {bit} bit is needed; remove it with 'chmod -s {path}' if not.",
+                    remediation=f"Verify the {bit} bit is needed; remove it with 'chmod -s {path}' if not (many SUID binaries are legitimate — do not blindly remove).",
                     evidence=path,
+                    # intentionally no fix_command: this may be a legitimate SUID binary.
                     mitre=["T1548.001"],
                     references=[REF],
                 )

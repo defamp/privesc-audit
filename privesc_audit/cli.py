@@ -7,10 +7,10 @@ import sys
 
 from . import __version__
 from .models import Severity
-from .report import render_console, render_json, render_markdown
+from .report import render_console, render_json, render_markdown, render_fix_script
 from .scanner import scan
 
-ALL_CHECKS = ["suid", "sudo", "capabilities", "writable"]
+ALL_CHECKS = ["suid", "sudo", "capabilities", "writable", "nfs"]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -19,7 +19,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Read-only Linux privilege-escalation audit & hardening scanner "
                     "for authorized assessments. It never modifies the system.",
     )
-    p.add_argument("-f", "--format", choices=["console", "json", "markdown"], default="console")
+    p.add_argument("-f", "--format", choices=["console", "json", "markdown", "fix-script"], default="console")
     p.add_argument("-c", "--checks", default="all",
                    help=f"comma-separated subset of: {','.join(ALL_CHECKS)} (default: all)")
     p.add_argument("-o", "--output", help="write report to a file instead of stdout")
@@ -48,6 +48,8 @@ def main(argv=None) -> int:
         text = render_json(findings)
     elif args.format == "markdown":
         text = render_markdown(findings)
+    elif args.format == "fix-script":
+        text = render_fix_script(findings)
     else:
         use_color = sys.stdout.isatty() and not args.no_color
         text = render_console(findings, use_color=use_color)
