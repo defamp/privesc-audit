@@ -4,8 +4,9 @@
 
 `privesc-audit` inspects the local machine for common **local privilege-escalation
 misconfigurations** — risky SUID/SGID binaries, over-broad `sudo` rules, dangerous
-file capabilities, and writable sensitive files / `$PATH` directories / cron paths —
-and reports each one with **remediation guidance** and a MITRE ATT&CK mapping.
+file capabilities, writable sensitive files / `$PATH` directories / cron paths, and
+membership of privilege-granting groups (`docker`, `lxd`, `disk`, …) — and reports
+each one with **remediation guidance** and a MITRE ATT&CK mapping.
 
 It is built for **authorized assessments and blue-team hardening**:
 
@@ -47,6 +48,7 @@ Exit codes (handy for CI / cron): `0` = nothing found, `1` = low/medium only,
 | `capabilities` | dangerous file capabilities (e.g. `cap_setuid`, `cap_dac_override`) | remove the capability, grant the narrowest one |
 | `writable` | writable `/etc/passwd`, `/etc/shadow`, `/etc/sudoers`, writable `$PATH` dirs, cron & systemd units | restore safe owner/permissions |
 | `nfs` | NFS exports with `no_root_squash` in `/etc/exports` | switch to `root_squash`, restrict hosts |
+| `groups` | accounts in privilege-granting groups (`docker`, `lxd`/`lxc`, `disk`, `shadow`, `adm`, `kvm`/`libvirt`, …) | remove members that don't need the group; prefer scoped access (e.g. rootless Docker) |
 
 The "known to escalate" list is derived from the public
 [GTFOBins](https://gtfobins.github.io/) project — used here purely as *audit

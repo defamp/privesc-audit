@@ -95,3 +95,29 @@ def test_suid_info_has_no_autofix():
     # a legitimate-looking SUID binary must NOT get an auto-fix command
     info = [f for f in analyze_suid(["/usr/bin/passwd"]) if f.severity == Severity.INFO][0]
     assert info.fix_command is None
+
+
+from privesc_audit.checks.groups import analyze_groups
+
+
+def test_groups_flags_docker_and_excludes_root():
+    findings = analyze_groups({"docker": ["defa", "root"]})
+    assert len(findings) == 1
+    f = findings[0]
+    assert f.severity == Severity.HIGH
+    assert "docker" in f.title and "defa" in f.title
+    assert "root" not in f.title          # root is already root, not an escalation
+    assert f.mitre == ["T1548"]
+    assert f.fix_command is None           # removal is manual, never auto-applied
+    assert "gpasswd -d" in f.remediation
+
+
+def test_groups_ignores_unknown_and_root_only():
+    # unknown group -> nothing; a dangerous group with only root -> nothing
+    assert analyze_groups({"users": ["defa"], "docker": ["root"]}) == []
+
+
+def test_groups_severity_ladder():
+    assert analyze_groups({"adm": ["defa"]})[0].severity == Severity.MEDIUM
+    assert analyze_groups({"sudo": ["defa"]})[0].severity == Severity.LOW
+    assert analyze_groups({"shadow": ["defa"]})[0].mitre == ["T1003.008"]

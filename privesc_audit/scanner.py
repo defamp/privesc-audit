@@ -7,10 +7,12 @@ so the tool is safe to run on any host, including as an unprivileged user.
 
 from __future__ import annotations
 
+import grp
 import os
+import pwd
 import shutil
 import subprocess
-from typing import List
+from typing import Dict, List
 
 from .models import Finding
 from .checks import suid as suid_check
@@ -18,6 +20,7 @@ from .checks import sudo as sudo_check
 from .checks import capabilities as cap_check
 from .checks import writable as writable_check
 from .checks import nfs as nfs_check
+from .checks import groups as groups_check
 
 _TIMEOUT = 90
 
@@ -106,9 +109,40 @@ def collect_nfs_exports() -> str:
         return ""
 
 
+def collect_group_memberships() -> Dict[str, List[str]]:
+    """Map each privilege-granting group to its non-root members (read-only).
+
+    Reads the group database (/etc/group via NSS) and adds the current user's
+    own primary + supplementary groups, so dynamic memberships are not missed.
+    """
+    want = set(groups_check.DANGEROUS_GROUPS)
+    result: Dict[str, set] = {}
+
+    try:
+        for g in grp.getgrall():
+            if g.gr_name.lower() in want and g.gr_mem:
+                result.setdefault(g.gr_name, set()).update(g.gr_mem)
+    except OSError:
+        pass
+
+    try:
+        me = pwd.getpwuid(os.getuid()).pw_name
+        for gid in set(os.getgroups()) | {os.getgid()}:
+            try:
+                name = grp.getgrgid(gid).gr_name
+            except (KeyError, OSError):
+                continue
+            if name.lower() in want:
+                result.setdefault(name, set()).add(me)
+    except (KeyError, OSError):
+        pass
+
+    return {k: sorted(v) for k, v in result.items()}
+
+
 def scan(checks=None) -> List[Finding]:
     """Run the selected checks against the live system and return all findings."""
-    checks = set(checks or {"suid", "sudo", "capabilities", "writable", "nfs"})
+    checks = set(checks or {"suid", "sudo", "capabilities", "writable", "nfs", "groups"})
     findings: List[Finding] = []
 
     if "suid" in checks:
@@ -125,6 +159,8 @@ def scan(checks=None) -> List[Finding]:
         findings += writable_check.analyze_writable_systemd(collect_writable_systemd())
     if "nfs" in checks:
         findings += nfs_check.analyze_nfs(collect_nfs_exports())
+    if "groups" in checks:
+        findings += groups_check.analyze_groups(collect_group_memberships())
 
     findings.sort(key=lambda f: (-int(f.severity), f.check, f.title))
     return findings

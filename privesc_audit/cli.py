@@ -10,7 +10,7 @@ from .models import Severity
 from .report import render_console, render_json, render_markdown, render_fix_script
 from .scanner import scan
 
-ALL_CHECKS = ["suid", "sudo", "capabilities", "writable", "nfs"]
+ALL_CHECKS = ["suid", "sudo", "capabilities", "writable", "nfs", "groups"]
 
 
 def build_parser() -> argparse.ArgumentParser:
