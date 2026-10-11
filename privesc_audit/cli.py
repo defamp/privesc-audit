@@ -6,8 +6,16 @@ import argparse
 import sys
 
 from . import __version__
+from .baseline import diff, load_baseline, save_baseline
 from .models import Severity
-from .report import render_console, render_json, render_markdown, render_fix_script
+from .report import (
+    render_console,
+    render_diff_console,
+    render_diff_json,
+    render_fix_script,
+    render_json,
+    render_markdown,
+)
 from .scanner import scan
 
 ALL_CHECKS = ["suid", "sudo", "capabilities", "writable", "nfs", "groups"]
@@ -24,6 +32,11 @@ def build_parser() -> argparse.ArgumentParser:
                    help=f"comma-separated subset of: {','.join(ALL_CHECKS)} (default: all)")
     p.add_argument("-o", "--output", help="write report to a file instead of stdout")
     p.add_argument("--no-color", action="store_true", help="disable ANSI colors in console output")
+    g = p.add_mutually_exclusive_group()
+    g.add_argument("--save", metavar="FILE",
+                   help="save the current findings as a baseline snapshot (JSON) and exit")
+    g.add_argument("--baseline", metavar="FILE",
+                   help="compare the current scan to a saved baseline and report only what changed")
     p.add_argument("-V", "--version", action="version", version=f"privesc-audit {__version__}")
     return p
 
@@ -38,11 +51,38 @@ def _resolve_checks(arg: str):
     return chosen
 
 
+def _emit(text: str, output: str) -> None:
+    if output:
+        with open(output, "w", encoding="utf-8") as fh:
+            fh.write(text + "\n")
+        print(f"report written to {output}")
+    else:
+        print(text)
+
+
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     checks = _resolve_checks(args.checks)
-
     findings = scan(checks)
+    use_color = sys.stdout.isatty() and not args.no_color
+
+    # Baseline snapshot: save the current state and exit.
+    if args.save:
+        save_baseline(findings, args.save)
+        print(f"baseline saved to {args.save} ({len(findings)} finding(s))")
+        return 0
+
+    # Baseline diff: report only what changed vs a saved snapshot (regression gate).
+    if args.baseline:
+        base_items, meta = load_baseline(args.baseline)
+        d = diff(findings, base_items, meta)
+        text = render_diff_json(d) if args.format == "json" else render_diff_console(d, use_color=use_color)
+        _emit(text, args.output)
+        if d.worst_new_severity >= int(Severity.HIGH):
+            return 2
+        if d.has_regression:
+            return 1
+        return 0
 
     if args.format == "json":
         text = render_json(findings)
@@ -51,15 +91,8 @@ def main(argv=None) -> int:
     elif args.format == "fix-script":
         text = render_fix_script(findings)
     else:
-        use_color = sys.stdout.isatty() and not args.no_color
         text = render_console(findings, use_color=use_color)
-
-    if args.output:
-        with open(args.output, "w", encoding="utf-8") as fh:
-            fh.write(text + "\n")
-        print(f"report written to {args.output}")
-    else:
-        print(text)
+    _emit(text, args.output)
 
     # Exit code for automation: 2 if any High+/Critical, 1 if only lower findings, 0 if none.
     if any(f.severity >= Severity.HIGH for f in findings):

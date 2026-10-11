@@ -39,6 +39,24 @@ privesc-audit --format fix-script -o harden.sh   # reviewable hardening script
 Exit codes (handy for CI / cron): `0` = nothing found, `1` = low/medium only,
 `2` = at least one High/Critical finding.
 
+### Baseline & diff
+
+Snapshot the current state, then on a later run report only what **changed** —
+new misconfigurations, resolved ones, and severity shifts. Use it as a
+hardening-regression gate: the job stays green while the host only improves and
+fails the moment a new privilege-escalation path appears.
+
+```bash
+privesc-audit --save baseline.json     # record the current findings
+# ...time passes, config drifts...
+privesc-audit --baseline baseline.json # show only what changed since then
+privesc-audit --baseline baseline.json --format json   # machine-readable diff
+```
+
+In diff mode the exit code is a regression gate: `0` = no new exposure (only
+resolved/unchanged), `1` = a new low/medium finding or severity increase,
+`2` = a new High/Critical finding.
+
 ## What it checks
 
 | Check | Looks for | Remediation it suggests |

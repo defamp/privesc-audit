@@ -87,6 +87,76 @@ def render_fix_script(findings: List[Finding]) -> str:
     return "\n".join(out)
 
 
+def _color_for_label(label: str):
+    try:
+        return _COLORS[Severity[label.upper()]]
+    except (KeyError, AttributeError):
+        return _COLORS[Severity.INFO]
+
+
+def render_diff_console(diff, use_color: bool = True) -> str:
+    """Render a baseline diff: only what is new, changed, or resolved."""
+    def c(label, text):
+        return f"{_color_for_label(label)}{text}{_RESET}" if use_color else text
+
+    base_count = diff.unchanged + len(diff.changed) + len(diff.resolved)
+    created = (diff.baseline_meta or {}).get("created") or "unknown date"
+    lines = [
+        "privesc-audit — baseline diff",
+        "=" * 52,
+        "",
+        f"Baseline : {created}  ({base_count} findings)",
+        f"Current  : {diff.current_count} findings",
+        "",
+    ]
+
+    if not diff.added and not diff.changed and not diff.resolved:
+        lines.append("No changes since baseline. The host's exposure is unchanged.")
+        return "\n".join(lines)
+
+    if diff.added:
+        lines.append(f"NEW ({len(diff.added)}) — appeared since the baseline:")
+        for f in diff.added:
+            lines.append("  " + c(f.severity.label, f"[{f.severity.label.upper()}] {f.title}"))
+            lines.append(f"      {f.remediation}")
+            if f.mitre:
+                lines.append(f"      att&ck: {', '.join(f.mitre)}")
+        lines.append("")
+
+    if diff.changed:
+        lines.append(f"CHANGED severity ({len(diff.changed)}):")
+        for f, old in diff.changed:
+            lines.append("  " + c(f.severity.label, f"[{old.upper()} → {f.severity.label.upper()}] {f.title}"))
+        lines.append("")
+
+    if diff.resolved:
+        lines.append(f"RESOLVED ({len(diff.resolved)}) — in the baseline, gone now:")
+        for item in diff.resolved:
+            sev = str(item.get("severity", "?"))
+            lines.append("  " + c(sev, f"[was {sev.upper()}] {item.get('title', '(untitled)')}"))
+        lines.append("")
+
+    if diff.has_regression:
+        lines.append("VERDICT: regression — new or worsened privilege-escalation exposure.")
+    else:
+        lines.append("VERDICT: no new exposure (only resolved/unchanged).")
+    return "\n".join(lines)
+
+
+def render_diff_json(diff) -> str:
+    changed = [{**f.to_dict(), "previous_severity": old} for f, old in diff.changed]
+    doc = {
+        "baseline": diff.baseline_meta or {},
+        "current_count": diff.current_count,
+        "regression": diff.has_regression,
+        "added": [f.to_dict() for f in diff.added],
+        "changed": changed,
+        "resolved": diff.resolved,
+        "unchanged": diff.unchanged,
+    }
+    return json.dumps(doc, indent=2)
+
+
 def render_markdown(findings: List[Finding]) -> str:
     out = ["# privesc-audit report", ""]
     counts = summary(findings)
