@@ -51,7 +51,14 @@ privesc-audit --save baseline.json     # record the current findings
 # ...time passes, config drifts...
 privesc-audit --baseline baseline.json # show only what changed since then
 privesc-audit --baseline baseline.json --format json   # machine-readable diff
+privesc-audit --baseline baseline.json --format markdown -o diff.md
 ```
+
+The Markdown diff report includes baseline metadata, finding counts, new findings,
+severity changes, resolved findings, and the regression verdict. Each listed finding
+includes evidence, remediation, and ATT&CK mappings when available. Save it with
+`-o diff.md` to attach to an audit report or paste into a GitHub issue. Markdown
+output uses the same regression exit codes as console and JSON output.
 
 In diff mode the exit code is a regression gate: `0` = no new exposure (only
 resolved/unchanged), `1` = a new low/medium finding or severity increase,

@@ -5,6 +5,7 @@ import pytest
 from privesc_audit import cli
 from privesc_audit.baseline import diff, load_baseline, save_baseline
 from privesc_audit.models import Finding, Severity
+from privesc_audit.report import render_diff_markdown
 
 
 def mkf(check, title, sev, evidence=None):
@@ -81,3 +82,54 @@ def test_cli_save_then_diff_gate(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(cli, "scan", lambda checks: [high, mkf("nfs", "new", Severity.HIGH, "/y")])
     assert cli.main(["--baseline", str(base)]) == 2
     assert "NEW (1)" in capsys.readouterr().out
+
+
+def test_markdown_diff_all_changes():
+    old = [mkf("suid", "removed", Severity.HIGH).to_dict(),
+           mkf("sudo", "raised", Severity.LOW).to_dict()]
+    new = mkf("groups", "docker | <host>", Severity.HIGH, "line1\nline2")
+    new.remediation = "review | members"
+    new.mitre = ["T1548"]
+    report = render_diff_markdown(diff(
+        [new, mkf("sudo", "raised", Severity.HIGH)], old,
+        {"created": "2026-10-16T00:00:00Z"},
+    ))
+    assert "## New (1)" in report
+    assert "## Changed severity (1)" in report
+    assert "## Resolved (1)" in report
+    assert "Low → High" in report
+    assert "docker \\| &lt;host&gt;" in report
+    assert "line1<br>line2" in report
+    assert "review \\| members" in report
+    assert "T1548" in report
+    assert "**Baseline:** 2026" in report
+    assert "**VERDICT:** regression" in report
+    assert "\033[" not in report
+
+
+@pytest.mark.parametrize("current_severity, expected_code", [
+    (None, 0), (Severity.LOW, 1), (Severity.HIGH, 2),
+])
+def test_cli_markdown_diff_file(tmp_path, monkeypatch, capsys, current_severity, expected_code):
+    base = tmp_path / "base.json"
+    output = tmp_path / "diff.md"
+    save_baseline([], str(base))
+    current = [] if current_severity is None else [mkf("groups", "new", current_severity)]
+    monkeypatch.setattr(cli, "scan", lambda checks: current)
+    assert cli.main(["--baseline", str(base), "--format", "markdown", "-o", str(output)]) == expected_code
+    report = output.read_text()
+    assert report.startswith("# privesc-audit baseline diff\n")
+    assert "report written to" in capsys.readouterr().out
+    if not current:
+        assert "No changes since baseline" in report
+        assert "**VERDICT:** no new exposure" in report
+
+
+def test_cli_markdown_diff_downgrade_stdout(tmp_path, monkeypatch, capsys):
+    base = tmp_path / "base.json"
+    save_baseline([mkf("sudo", "rule", Severity.HIGH)], str(base))
+    monkeypatch.setattr(cli, "scan", lambda checks: [mkf("sudo", "rule", Severity.LOW)])
+    assert cli.main(["--baseline", str(base), "--format", "markdown"]) == 0
+    report = capsys.readouterr().out
+    assert "High → Low" in report
+    assert "**VERDICT:** no new exposure" in report

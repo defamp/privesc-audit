@@ -12,6 +12,7 @@ from .report import (
     render_console,
     render_diff_console,
     render_diff_json,
+    render_diff_markdown,
     render_fix_script,
     render_json,
     render_markdown,
@@ -76,7 +77,12 @@ def main(argv=None) -> int:
     if args.baseline:
         base_items, meta = load_baseline(args.baseline)
         d = diff(findings, base_items, meta)
-        text = render_diff_json(d) if args.format == "json" else render_diff_console(d, use_color=use_color)
+        if args.format == "json":
+            text = render_diff_json(d)
+        elif args.format == "markdown":
+            text = render_diff_markdown(d)
+        else:
+            text = render_diff_console(d, use_color=use_color)
         _emit(text, args.output)
         if d.worst_new_severity >= int(Severity.HIGH):
             return 2

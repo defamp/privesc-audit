@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import html
 from collections import Counter
 from typing import List
 
@@ -155,6 +156,50 @@ def render_diff_json(diff) -> str:
         "unchanged": diff.unchanged,
     }
     return json.dumps(doc, indent=2)
+
+
+def render_diff_markdown(diff) -> str:
+    """Render a shareable baseline diff without terminal escape sequences."""
+    def cell(value):
+        text = html.escape(str(value) if value is not None else "", quote=False)
+        for char in "\\`*_{}[]()#+-.!|":
+            text = text.replace(char, "\\" + char)
+        return text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "<br>")
+
+    base_count = diff.unchanged + len(diff.changed) + len(diff.resolved)
+    created = (diff.baseline_meta or {}).get("created") or "unknown date"
+    out = [
+        "# privesc-audit baseline diff", "",
+        f"**Baseline:** {cell(created)} ({base_count} findings)", "",
+        f"**Current:** {diff.current_count} findings", "",
+        f"**Summary:** New: {len(diff.added)} · Changed: {len(diff.changed)} · "
+        f"Resolved: {len(diff.resolved)} · Unchanged: {diff.unchanged}", "",
+    ]
+    if not diff.added and not diff.changed and not diff.resolved:
+        out += ["No changes since baseline. The host's exposure is unchanged.", ""]
+
+    sections = [
+        ("New", [(f.to_dict(), f.severity.label) for f in diff.added]),
+        ("Changed severity", [(f.to_dict(), f"{old} → {f.severity.label}")
+                              for f, old in diff.changed]),
+        ("Resolved", [(item, item.get("severity", "?")) for item in diff.resolved]),
+    ]
+    for title, rows in sections:
+        if not rows:
+            continue
+        out += [f"## {title} ({len(rows)})", "",
+                "| Severity | Finding | Evidence | Remediation | ATT&CK |",
+                "|---|---|---|---|---|"]
+        for item, severity in rows:
+            values = [severity, item.get("title", "(untitled)"), item.get("evidence"),
+                      item.get("remediation", ""), ", ".join(item.get("mitre") or [])]
+            out.append("| " + " | ".join(cell(value) for value in values) + " |")
+        out.append("")
+
+    verdict = ("regression — new or worsened privilege-escalation exposure."
+               if diff.has_regression else "no new exposure.")
+    out.append(f"**VERDICT:** {verdict}")
+    return "\n".join(out)
 
 
 def render_markdown(findings: List[Finding]) -> str:
